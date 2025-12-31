@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  heroes    Hero[]
+}
+
+model Hero {
+  id             String   @id @default(uuid())
+  name           String
+  rarity         String   // Enum Rarity
+  appearanceSeed Int      // Deterministic visual seed
+  role           String   // warrior, archer, blacksmith...
+  level          Int
+
+  // Base Stats
+  strength       Int
+  dexterity      Int
+  intelligence   Int
+  vitality       Int
+
+  // Mental Stats
+  iq             Int
+  eq             Int
+  mental         Int
+
+  playerId  String
+  player    Player  @relation(fields: [playerId], references: [id])
+
+  injuries  Injury[]
+  equipment Equipment[]
+}
+
+model Injury {
+  id        String @id @default(uuid())
+  heroId    String
+  part      String // head, arm, leg
+  severity  Int
+
+  hero      Hero @relation(fields: [heroId], references: [id])
+}
+
+model Equipment {
+  id        String @id @default(uuid())
+  heroId    String?
+  name      String
+  rarity    String
+  durability Int
+
+  hero      Hero? @relation(fields: [heroId], references: [id])
+}
