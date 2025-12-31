@@ -23,7 +23,13 @@ export interface HeroStats {
     mental: number; // Mental resilience
 }
 
-// ... HealthStatus ...
+// Health Status
+export interface HealthStatus {
+    hp: number;
+    maxHp: number;
+    injuries: Record<string, string>; // bodyPart -> severity
+    stress: number;
+}
 
 export interface HeroState {
     id: string;

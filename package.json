@@ -9,5 +9,10 @@
   "scripts": {
     "dev:client": "pnpm --filter @pmu/client dev",
     "dev:server": "pnpm --filter @pmu/server dev"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/sharp": "^0.32.0",
+    "sharp": "^0.34.5"
   }
 }

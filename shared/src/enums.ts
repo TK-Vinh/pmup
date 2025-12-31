@@ -23,6 +23,25 @@ export enum ActionType {
     RELOAD = 'RELOAD'
 }
 
+export enum Direction {
+    NONE = "NONE",
+    N = "N",
+    E = "E",
+    S = "S",
+    W = "W",
+    NE = "NE",
+    SE = "SE",
+    SW = "SW",
+    NW = "NW",
+}
+
+export enum TerrainType {
+    GRASS = "grass",
+    DIRT = "dirt",
+    SAND = "sand",
+    CLIFF = "cliff",
+}
+
 export enum Faction {
     PLAYER = 'PLAYER',
     ENEMY = 'ENEMY',

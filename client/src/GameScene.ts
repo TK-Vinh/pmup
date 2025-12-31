@@ -4,11 +4,16 @@ import { IsoRenderer } from './IsoRenderer';
 import { BuildingSystem } from './BuildingSystem';
 import { UIManager } from './UIManager';
 import type { HeroState } from '@pmu/shared/src/types';
+import { AssetLoader } from './map/AssetLoader';
+import { ClientMapManager } from './map/ClientMapManager';
 
 export class GameScene extends Phaser.Scene {
     private network!: NetworkManager;
     private buildingSystem!: BuildingSystem;
     private uiManager!: UIManager;
+    private assetLoader!: AssetLoader;
+    private mapManager!: ClientMapManager;
+
     private heroSprites: Map<string, Phaser.GameObjects.Arc> = new Map();
     private debugText!: Phaser.GameObjects.Text;
 
@@ -17,7 +22,17 @@ export class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('dirt', 'assets/dirt.png');
+        // Initialize Asset Loader
+        this.assetLoader = new AssetLoader(this);
+
+        // Preload tiles (Standard set 0-47, or user's sliced set 0-35)
+        // User has sliced grass 0-35. Let's load 0-47 to be safe/generic or just 0-35.
+        // The loader checks if file exists? No, Phaser queues it. 
+        // We should stick to what we have or generic max.
+        // Let's load 0-47 (standard blob) - if file missing, Phaser logs warning but continues.
+        this.assetLoader.preloadTiles();
+
+        this.load.image('dirt', 'assets/dirt.png'); // Keep legacy for fallback if needed
         // Building sprites
         this.load.image('building_town_hall', 'assets/building_town_hall.png');
         this.load.image('building_barracks', 'assets/building_barracks.png');
@@ -37,16 +52,34 @@ export class GameScene extends Phaser.Scene {
 
         this.buildingSystem = new BuildingSystem(this, this.network);
         this.uiManager = new UIManager(this.network);
+        this.mapManager = new ClientMapManager(this);
 
-        this.createGround();
+        // Render the Auto-Tiled Map
+        this.mapManager.render();
+
+        // Draw Grid Overlay (Optional, keep for debugging/placement visibility)
         this.drawGrid();
+
+        // Initial Zoom for better view
+        this.cameras.main.setZoom(0.8);
+        this.cameras.main.centerOn(400, 300);
+
+        // Zoom Controls
+        this.input.on('wheel', (pointer: Phaser.Input.Pointer, gameObjects: any, deltaX: number, deltaY: number, deltaZ: number) => {
+            const newZoom = this.cameras.main.zoom - deltaY * 0.001;
+            this.cameras.main.setZoom(Phaser.Math.Clamp(newZoom, 0.1, 2));
+        });
+
+        // Debug text update
+        this.debugText = this.add.text(10, 10, 'Use Mouse Wheel to Zoom', { font: '16px Courier', color: '#00ff00' });
+        this.debugText.setScrollFactor(0); // Fix to screen
 
         this.debugText = this.add.text(10, 10, 'Connecting...', {
             color: '#00ff00',
             backgroundColor: '#000000'
         });
         this.debugText.setScrollFactor(0);
-        this.debugText.setDepth(100);
+        this.debugText.setDepth(2000); // High depth
 
         this.cameras.main.centerOn(400, 300);
 
@@ -129,9 +162,6 @@ export class GameScene extends Phaser.Scene {
         const gridY = Math.round(gridPos.y);
 
         // Send move command
-        // Import ClientMessageType to use enum safely or use string literal 'BUILDING_MOVE'
-        // Since we are inside GameScene, importing Message types might require path adjustment
-        // For simplicity, using 'BUILDING_MOVE' as string literal matching schema
         this.network.send({
             type: 'BUILDING_MOVE',
             payload: {
@@ -149,53 +179,6 @@ export class GameScene extends Phaser.Scene {
         if (this.ghostMarker) {
             this.ghostMarker.clear();
         }
-    }
-
-    private createGround() {
-        // Use TileSprite with GeometryMask to clip to the isometric grid bounds
-        const size = 10; // MUST match drawGrid size
-        const centerOffsetX = 400;
-        const centerOffsetY = 300;
-
-        // Calculate the 4 corners of the GRID (matching drawGrid)
-        // Grid goes from -size to +size, so corners are at ±(size+1) to include all cells
-        const p1 = IsoRenderer.worldToScreen({ x: -size, y: -size, z: 0 }); // Top
-        const p2 = IsoRenderer.worldToScreen({ x: size + 1, y: -size, z: 0 }); // Right
-        const p3 = IsoRenderer.worldToScreen({ x: size + 1, y: size + 1, z: 0 }); // Bottom
-        const p4 = IsoRenderer.worldToScreen({ x: -size, y: size + 1, z: 0 }); // Left
-
-        const v1 = { x: p1.x + centerOffsetX, y: p1.y + centerOffsetY };
-        const v2 = { x: p2.x + centerOffsetX, y: p2.y + centerOffsetY };
-        const v3 = { x: p3.x + centerOffsetX, y: p3.y + centerOffsetY };
-        const v4 = { x: p4.x + centerOffsetX, y: p4.y + centerOffsetY };
-
-        // Calculate bounding box of the diamond with extra padding
-        const padding = 50;
-        const width = Math.abs(v2.x - v4.x) + padding;
-        const height = Math.abs(v3.y - v1.y) + padding;
-
-        // Create TileSprite centered and sized to cover the diamond + padding
-        const tileSprite = this.add.tileSprite(centerOffsetX, centerOffsetY, width, height, 'dirt');
-        tileSprite.setDepth(-10000); // Lower depth significantly to prevent occlusion of northern buildings
-
-        // Scale down the texture tiling so each "repeat" fits one tile
-        // Texture is 1024x1024, tile is 64x32 display size
-        // So we want the texture to repeat (width/64) times horizontally and (height/32) times vertically
-        tileSprite.setTileScale(64 / 1024, 32 / 1024);
-
-        // Create mask graphics matching the grid diamond
-        const maskGraphics = this.make.graphics({});
-        maskGraphics.fillStyle(0xffffff);
-        maskGraphics.beginPath();
-        maskGraphics.moveTo(v1.x, v1.y);
-        maskGraphics.lineTo(v2.x, v2.y);
-        maskGraphics.lineTo(v3.x, v3.y);
-        maskGraphics.lineTo(v4.x, v4.y);
-        maskGraphics.closePath();
-        maskGraphics.fillPath();
-
-        const mask = maskGraphics.createGeometryMask();
-        tileSprite.setMask(mask);
     }
 
     update(time: number, delta: number) {
@@ -241,11 +224,15 @@ export class GameScene extends Phaser.Scene {
 
         const screenPos = IsoRenderer.worldToScreen(hero.position);
         sprite.setPosition(screenPos.x + 400, screenPos.y + 300);
+
+        // Depth sort heroes based on Y
+        sprite.setDepth(sprite.y);
     }
 
     private drawGrid() {
         const graphics = this.add.graphics();
-        graphics.lineStyle(1, 0x444444);
+        graphics.lineStyle(1, 0x444444, 0.5);
+        graphics.setDepth(500); // Between ground and objects
 
         const size = 10;
         const centerOffsetX = 400;
